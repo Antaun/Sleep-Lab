@@ -1,0 +1,13 @@
+{
+  "id": "com.domain.app1",
+  "version": "2.0.0",
+  "vendor": "My Company",
+  "type": "web",
+  "main": "index.html",
+  "title": "sleepsupporter",
+  "icon": "icon.png",
+  "requiredPermissions": [
+    "time.query",
+    "activity.operation"
+  ]
+}

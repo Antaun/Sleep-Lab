@@ -1,0 +1,11 @@
+{
+  "name": "com.domain.app1.service",
+  "version": "1.0.0",
+  "description": "Sensor Service",
+  "main": "sensor_service.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "BSD"
+}

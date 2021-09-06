@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<meta charset="utf-8" />
+<title>Sleep Supporter</title>
+<link rel="stylesheet" href="index.css" type="text/css" media="all" />
+<!--script src="webOS.js" charset="utf-8"></script-->
+<script src="https://use.fontawesome.com/b41ef971f9.js"></script>
+<script language="javascript" type="text/javascript">
+
+  var ws_server_ip = '10.120.128.25';  //Websocket server ip address
+  var msgReceived  = true;             //Flag for received message
+  var replyLostCnt = 0;                //Number of messages not replied from sensor
+  var intervalID;                      //Sensor data request interval ID
+
+  function init()
+  {
+    document.getElementById("status").innerHTML = "Off";
+    document.getElementById("temp").innerHTML = "--";
+    document.getElementById("hum").innerHTML = "--";
+    document.getElementById("cd").innerHTML = "--";
+    testWebSocket(ws_server_ip);
+  }
+
+  function testWebSocket(ip)
+  {
+    if (window.location.protocol === "file:")
+      var url = 'ws://'+ ip +':80';
+    else
+      var url = ((window.location.protocol === "https:") ? "wss://" : "ws://") + window.location.host + ':80';
+
+    websocket = new WebSocket(url);
+    websocket.onopen = function(evt) { onOpen(evt) };
+    websocket.onclose = function(evt) { onClose(evt) };
+    websocket.onmessage = function(evt) { onMessage(evt) };
+    websocket.onerror = function(evt) { onError(evt) };
+  }
+
+  function onOpen(evt)
+  {
+    console.log("CONNECTED");
+    document.getElementById("status").innerHTML = "On";
+    intervalID = setInterval(function(){doSend();}, 2000);
+    showNotification("Sensor device connected");
+  }
+  function onClose(evt)
+  {
+    console.log("DISCONNECTED");
+    document.getElementById("status").innerHTML = "Off";
+    document.getElementById("temp").innerHTML = "--";
+    document.getElementById("hum").innerHTML = "--";
+    document.getElementById("cd").innerHTML = "--";
+    clearInterval(intervalID);
+    showNotification("Sensor device disconnected");
+  }
+
+  function onMessage(evt)
+  {
+    var message = JSON.parse(evt.data);
+
+    msgReceived = true;
+    console.log('>RESPONSE: ' +evt.data);
+    document.getElementById("status").innerHTML = "On";
+    document.getElementById("temp").innerHTML = message.sensors.temperature;
+    document.getElementById("hum").innerHTML = message.sensors.humidity;
+    document.getElementById("cd").innerHTML = message.uniqueID.substr(0,6);
+  }
+
+  function onError(evt)
+  {
+    console.log('">ERROR:' + evt.data);
+    document.getElementById("status").innerHTML = "Off";
+    document.getElementById("temp").innerHTML = "--";
+    document.getElementById("hum").innerHTML = "--";
+    document.getElementById("cd").innerHTML = "--";
+    clearInterval(intervalID);
+    showNotification("Sensor communication error");
+    websocket.close();
+  }
+
+  function doSend()
+  {
+    /*JSON API commands to retrieve data from sensor */
+    var jsonGetData = {"command": 1, "sensors":["temperature","humidity"]}; 
+    var jsonGetDataAll = {"command": 2};       
+    
+    var bridge = new WebOSServiceBridge();
+    
+    var openApi = 'luna://com..webos.service.peripheralmanager/uart/open';
+    var openParams = '{"interfaceId":"UART1"}';
+
+    var setBaudrateApi = 'luna://com..webos.service.peripheralmanager/uart/setBaudrate';
+    var setBaudrateParams = '{"interfaceId":"UART1", "baudrate":9600}';
+        
+    var readApi = 'luna://com..webos.service.peripheralmanager/uart/read';
+    var readParams = '{"interfaceId":"UART1", "size":9}';
+
+    var writeApi = 'luna://com..webos.service.peripheralmanager/uart/write';
+    var writeParams = '{"interfaceId":"UART1", "dataType":"string", "size":9}';
+
+    var closeApi = 'luna://com..webos.service.peripheralmanager/uart/close';
+    var closeParams = '{"interfaceId":"UART1"}';
+    
+    function open_callback(msg){
+      var arg = JSON.parse(msg);
+      if (arg.returnValue) {
+        console.log("SUCCESS!");
+      }
+      else {
+      }
+    }
+    
+    function setBaudrate_callback(msg){
+      var arg = JSON.parse(msg);
+      if (arg.returnValue) {
+        console.log("SUCCESS!");
+      }
+      else {
+      }
+    }
+    
+
+    function read_callback(msg){
+      var arg = JSON.parse(msg);
+        if (arg.returnValue) {
+          document.getElementById("result").innerHTML = arg.value; 
+        }
+        else {
+        }
+    }
+
+    function closecallback(msg){
+      var arg = JSON.parse(msg);
+      if (arg.returnValue) {
+        console.log("SUCCESS!");
+      }
+      else {
+      }
+    }
+
+    bridge.onservicecallback = open_callback;
+    bridge.call(openApi,openParams);
+
+    bridge.onservicecallback = setBaudrate_callback;
+    bridge.call(setBaudrateApi,setBaudrateParams);
+
+    bridge.onservicecallback = read_callback;
+    bridge.call(readApi,readParams);
+
+    bridge.onservicecallback = close_callback;
+    bridge.call(closeApi,closeParams);
+
+    if(msgReceived)
+    {
+      console.log("SENT: " + JSON.stringify(jsonGetData));
+      websocket.send(JSON.stringify(jsonGetData));
+      msgReceived = false;
+    }
+    else
+    {
+      if(++replyLostCnt >= 2)
+      {
+        replyLostCnt = 0;
+        msgReceived = true;  
+        document.getElementById("status").innerHTML = "??";
+        document.getElementById("temp").innerHTML = "--";
+        document.getElementById("hum").innerHTML = "--";
+        document.getElementById("cd").innerHTML = "--";
+        showNotification("Sensor communication lost");
+      }
+    }
+  }
+
+  function showNotification(message)
+  {
+    var lunaReq = webOS.service.request("luna://com.webos.notification",
+    {
+      method:"createToast",
+      parameters:{
+        "sourceId" : "com.sample.iotsensor",
+        "message"  : message
+      },
+      onSuccess: function (args) {
+      },
+      onFailure: function (args) {
+      }
+    });
+  }
+  window.addEventListener("load", init, false);
+
+  $(function () {
+        $("#switch").click(function () { $("#status").html("On"); });
+    }); 
+
+  function click()
+  {
+    document.getElementById("status").innerHTML = "On";
+  }
+
+</script>
+
+<body>
+
+  <img class="sty"src="icon.png" alt="ifx_logo" id="ifxLogo">
+  <div class="whole">
+  <h2>Sleep Supporter</h2>
+  <div class="tile job">
+    <div class="header">
+      <div class="count" id="status"></div>
+      <div class="title" id="uid">ID</div>
+    </div>
+    <div class="body">
+      <div class="title">Status</div>
+    </div>
+  </div>
+  <div class="tile job">
+    <div class="header">
+      <div class="count" id="temp"></div>
+      <div class="title">°C</div>
+    </div>
+    <div class="body">
+      <div class="title">Temperature</div>
+    </div>
+  </div>
+  <div class="tile job">
+    <div class="header">
+      <div class="count" id="hum"></div>
+      <div class="title">%</div>
+    </div>
+    <div class="body">
+      <div class="title">Humidity</div>
+    </div>
+  </div>
+  <div class="tile job">
+    <div class="header">
+      <div class="count" id="cd"></div>
+      <div class="title">candela</div>
+    </div>
+    <div class="body">
+      <div class="title">Light Intensity</div>
+    </div>
+  </div>
+  <!--button id="switch">ON/OFF</button-->
+  <a s="btn" id="switch" title="Leave"><i class="fa fa-power-off" aria-hidden="true"></i></a>
+</div>
+</body>
+      
